@@ -106,7 +106,7 @@ def verefy(msg,pubkey):
 
 if __name__ == '__main__':
     # Alice key pair
-    pubkey, privkey = keygen(2 ** 2048)
+    pubkey, privkey = keygen(2 ** 512)
 
     
     # bob wants to send msg after blinding it
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     verefy(ubsignedmsg,pubkey)
     # as result : Alice not kwnow what she sign, bob send it, and verify is correct
 
-
+    print()
 
     # just sign 
     justSign = signature(msg, privkey)
