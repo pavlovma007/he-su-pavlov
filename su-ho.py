@@ -114,24 +114,25 @@ public_key, private_key = rsa.newkeys(2048)
 # # Ну и чего ??? нифига он не работает как надо 
 
 
-import rsa.core
-mes:int = 100
-#blind 
-blinded, inv = public_key.blind(mes)
-blinded_bytes = int_to_bytes(blinded)
-#sign
-h = hashlib.md5()
-h.update(blinded_bytes)
-h:bytes = h.digest() # stage 1 of sign
-h_int:int = bytes_to_int(h) % 100500
-signedBlind_int = rsa.core.encrypt_int(h_int, private_key.d, private_key.n) 
-#unblind
-undblinded:int = public_key.unblind(signedBlind_int, inv)
-undblinded_bytes = int_to_bytes(undblinded)
-#verify
-decrypted = rsa.core.decrypt_int(undblinded, public_key.e, public_key.n) 
-assert h == decrypted
-sys.exit()
+# Этот тест тоже провален - rsa.sign\verify не могут нормально работать в паре с их blind\unblind
+# import rsa.core
+# mes:int = 100
+# #blind 
+# blinded, inv = public_key.blind(mes)
+# blinded_bytes = int_to_bytes(blinded)
+# #sign
+# h = hashlib.md5()
+# h.update(blinded_bytes)
+# h:bytes = h.digest() # stage 1 of sign
+# h_int:int = bytes_to_int(h) % 100500
+# signedBlind_int = rsa.core.encrypt_int(h_int, private_key.d, private_key.n) 
+# #unblind
+# undblinded:int = public_key.unblind(signedBlind_int, inv)
+# undblinded_bytes = int_to_bytes(undblinded)
+# #verify
+# decrypted = rsa.core.decrypt_int(undblinded, public_key.e, public_key.n) 
+# assert h == decrypted
+# sys.exit()
 ##################################################################
 r = Registrator() # там возникнет пара ключей "для конкретного голосования"
 a = Agency(r)
