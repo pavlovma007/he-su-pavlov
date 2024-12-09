@@ -69,9 +69,7 @@ def keygen(N, public=None) -> KeyPair:
 	return KeyPair(Key(public, composite), Key(private, composite))
 
 def signature(msg, privkey) -> int:
-	# f=open('_signedfile','w')
 	coded = pow(int(msg), *privkey)% privkey[1]
-	# f.write(str(coded))
 	return coded
 
 def blindingfactor(N) -> int:
@@ -86,22 +84,15 @@ def blindingfactor(N) -> int:
 			return blind_r
 
 def blind(msg,pubkey) -> int:
-	# f=open('_blindmsg','w')
 	inv=blindingfactor(pubkey[1]) # можно считать "иногда" , но "всегда" - надёжнее
 	m=int(msg)
 	blindmsg=(pow(inv,*pubkey)*m)% pubkey[1]
-	# print( "Blinded Message "+str(blindmsg))
-	# f.write(str(blindmsg))
 	return blindmsg, inv
 
 def unblind(msg,r,pubkey) -> int:
-	# f=open('_unblindsigned','w')
 	bsm=int(msg)
 	ubsm=(bsm*multinv(pubkey[1],r))% pubkey[1]
-	# print( "Unblinded Signed Message "+str(ubsm))
-	# f.write(str(ubsm))
 	return ubsm
 
 def verefy(msg:int, pubkey) -> int:
-	# print( "Message After Verification "+str(pow(int(msg),*pubkey)%pubkey[1]))
 	return pow(int(msg),*pubkey)%pubkey[1]
