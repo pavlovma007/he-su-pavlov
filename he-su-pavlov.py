@@ -1,4 +1,4 @@
-import os, random, sys, pprint
+import os, random, sys, pprint, datetime, time
 import pyaes, hashlib
 import math, pickle
 import lib_blind
@@ -22,15 +22,32 @@ def hash_of_pub_key(pub_key) -> int:
 		return result
 
 
-
+class S3LikeFileUploadAccount():
+	"сюда можно только загружать файлы в папки , но их конечное имя бдет дополнено постфиксом"
+	files = []
+	def uploadToFolderWithPostfixRaname(self, folder, fileNamePrefix, fileContent):
+		postfix = datetime.date.today().strftime("%Y%m%d") + str(random.randint(0, 1000))
+		outFN = folder + '/' + fileNamePrefix + '-' + postfix
+		self.files.append({"path": outFN, "content": fileContent})
+	
+	def listFilesInfoFder(self, folderName):
+		result = []
+		for f in self.files:
+			if f['path'].startswith(folderName+'/'):
+				result.append(f)
+		return result
+REGISTRATORSIGNREQUESTFOLDER = 'RegistratorSignRequest'
+REGISTRATORSIGNRESULTFOLDER = 'RegistratorSignResult'
 class Registrator:
 	"registrator"
 	MARKSLIST = []
+	s3AddOnly = None
 	private_key=None
 	public_key=None
 
-	def __init__(self):
+	def __init__(self, s3:S3LikeFileUploadAccount):
 		self.public_key, self.private_key = lib_blind.keygen(2 ** N)
+		self.s3AddOnly = s3
 		print('Registrator сформировал свои ключи')
 
 	def do_public_elector_list(self):
@@ -41,7 +58,34 @@ class Registrator:
 		print('Registrator. отдал свой публичный ключ, кому-то, кто запросил')
 		return pickle.dumps(self.public_key)
 	
-	def io_elector_sign(self,  mark_1, unknownBulshitInfo:int)->int:
+
+	def scanS3SignRequests(self):
+		"сканирует файлы запросы в s3 и выкладывает туда же подписи, если ок"
+		readySigns = self.s3AddOnly.listFilesInfoFder(REGISTRATORSIGNRESULTFOLDER)
+		def isSignExists(name):
+			result = False
+			for f in readySigns:
+				if f['path'].startswith(REGISTRATORSIGNRESULTFOLDER+'/'+name):
+					result = True
+			return result
+		for f in self.s3AddOnly.listFilesInfoFder(REGISTRATORSIGNREQUESTFOLDER):
+			p = f['path']
+			n = p.split('/')[1]
+			n = n.split('-')[0]
+			if isSignExists(n):
+				continue
+			#делаем подпись
+			mark_1 = f['content']['mark_1']
+			boolshit = f['content']['input']
+			result = self._io_elector_sign(mark_1, boolshit)
+			# формируем и выгружаем ответ
+			self.s3AddOnly.uploadToFolderWithPostfixRaname(REGISTRATORSIGNRESULTFOLDER, str(mark_1),
+												  {
+														"mark_1": mark_1, 
+														"input": boolshit, 
+														"sign": result
+													})
+	def _io_elector_sign(self,  mark_1, unknownBulshitInfo:int)->int:
 		# по признакам проверим избирателя, он как то себя представить должен. 
 		# тут просто код, который знает только он
 		if mark_1 not in self.MARKSLIST:
@@ -148,6 +192,8 @@ class Agency:
 class Elector:
 	"elector"
 
+	# Сюда можно лишь загружать файлы, удалять и менять их никак
+	s3AddOnly = None
 	# признак, которым представляемся Регистратору, вместо аутентификации
 	mark_1 = None 
 	# другая метка для связи двух документов : "шифрованный бюлетень" и "ключ для расшифровки бюлетеня" 
@@ -168,7 +214,8 @@ class Elector:
 	# знак, что наши ключи приняты как авторизованные для голосования
 	is_keys_is_authorised = False
 
-	def __init__(self, r:Registrator, a:Agency):
+	def __init__(self, r:Registrator, a:Agency, s3AddOnly:S3LikeFileUploadAccount):
+		self.s3AddOnly = s3AddOnly
 		self.mark_1 = random.randint(2, 2 ** 64)
 		self.mark_2 = random.randint(2, 2 ** 64)
 		self.r = r; self.a = a
@@ -202,7 +249,29 @@ class Elector:
 
 		self.blinded, self.blindInverse    =    lib_blind.blind(msg, self.r.public_key )#
 
-		signedBlind_int:int = self.r.io_elector_sign(self.mark_1, self.blinded)
+		# создадим в публичном поле запрос на подпись нашего ключа
+		self.s3AddOnly.uploadToFolderWithPostfixRaname(REGISTRATORSIGNREQUESTFOLDER, str(self.mark_1), 
+												 {	"mark_1": self.mark_1, 
+													"input": self.blinded
+													})
+		
+		# имитация периодической обработки входящих запросов подписи TODO убрать в реальности
+		self.r.scanS3SignRequests()
+
+		# мы тут просто ждём что наш запрос обработается
+		isPublished = False
+		while not isPublished:
+			l = self.s3AddOnly.listFilesInfoFder(REGISTRATORSIGNRESULTFOLDER)
+			for f in l:
+				if f['path'].startswith(REGISTRATORSIGNRESULTFOLDER+'/'+str(self.mark_1)) and \
+						f['content']['input'] == self.blinded:
+					signedBlind_int = f['content']['sign']
+					isPublished = True
+					break
+			if not isPublished: time.sleep(10)
+		
+
+		# signedBlind_int:int = self.r._io_elector_sign(self.mark_1, self.blinded)
 		# тут "магия" мы расчитали подпись. она такая как будто регистратор видел наш публичный ключ, а он не видел.
 		self.signedHashOfPubKeyByRegistrator = lib_blind.unblind(signedBlind_int, self.blindInverse, self.r.public_key) # 
 				
@@ -273,14 +342,27 @@ class Elector:
 
 
 ##################################################################
-r = Registrator() # там возникнет пара ключей "для конкретного голосования"
+s3AddOnly = S3LikeFileUploadAccount()
+r = Registrator(s3AddOnly) # там возникнет пара ключей "для конкретного голосования"
 a = Agency(r)
-e = Elector(r, a)
+e = Elector(r, a, s3AddOnly)
 
 
 r.do_public_elector_list()
 print('Авторизованные ключи Публично (кто-то собирается с их помощью голосовать)', )
 pprint.pprint(a.io_get_public_authorized_keys())
+print('число избирателей всего', len(r.MARKSLIST))
+
+print('\nсодержимое обменника комуникаций регистратора')
+pprint.pprint(s3AddOnly.files)
+
+reqCount = len(s3AddOnly.listFilesInfoFder(REGISTRATORSIGNREQUESTFOLDER))
+print('число запросов подписи ключей от избирателей', reqCount)
+
+print(f'число авторизованных ключей ({len(a.authorized_keys)}) не может превышать число запросов от изирателей ({reqCount})')
+print('иначе доказано самоволное подписывание каки-то ключей регистратором - вброс')
+
+
 
 # теперь началось голосование
 print('\n!!! Теперь Началось Голосование !!!\n')
