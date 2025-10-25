@@ -1,25 +1,21 @@
-import os, random, sys, pprint, datetime, time
-import pyaes, hashlib
-import math, pickle
+import hashlib, sys, os
+import random, pprint, datetime, time
+import pyaes
+# PyCryptodome вместо самописной RSA
+from Crypto.PublicKey import RSA
+from Crypto.Util.number import inverse, GCD
+from Crypto.Hash import SHA256
+
 import lib_blind
 
-N = 128
+# N теперь означает размер ключа в битах (а не 2**N)
+N = 2048  # безопасный размер
 
-# utils
-def bytes_to_int(b):
-	# return rsa.transform.bytes2int(b)
-	return int.from_bytes(b, byteorder='little')
-def int_to_bytes(i):
-	# return rsa.transform.int2bytes(i)
-	length = math.ceil(i.bit_length() / 8)
-	return i.to_bytes(length, byteorder='little')
-def hash_of_pub_key(pub_key) -> int:
-		m = hashlib.sha256()
-		pubKeyAsBytes = pickle.dumps(pub_key)
-		m.update(pubKeyAsBytes)
-		# хэш от публичного ключа
-		result = bytes_to_int(m.digest()) % sys.maxsize
-		return result
+def hash_of_pub_key(pub_key_obj) -> int:
+	pub_key_der = pub_key_obj.export_key(format='DER')
+	m = hashlib.sha256()
+	m.update(pub_key_der)
+	return lib_blind.bytes_to_int(m.digest())  # ← УБРАЛИ % sys.maxsize
 
 
 class S3LikeFileUploadAccount():
@@ -36,8 +32,10 @@ class S3LikeFileUploadAccount():
 			if f['path'].startswith(folderName+'/'):
 				result.append(f)
 		return result
+
 REGISTRATORSIGNREQUESTFOLDER = 'RegistratorSignRequest'
 REGISTRATORSIGNRESULTFOLDER = 'RegistratorSignResult'
+
 class Registrator:
 	"registrator"
 	MARKSLIST = []
@@ -45,19 +43,18 @@ class Registrator:
 	private_key=None
 	public_key=None
 
-	def __init__(self, s3:S3LikeFileUploadAccount):
-		self.public_key, self.private_key = lib_blind.keygen(2 ** N)
+	def __init__(self, s3: S3LikeFileUploadAccount):
+		self.public_key, self.private_key = lib_blind.keygen(N)
 		self.s3AddOnly = s3
 		print('Registrator сформировал свои ключи')
-
+	
 	def do_public_elector_list(self):
 		print('Registrator. Список избирателей (те, кто в принципе имеют право голосовать и им могут быть подписаны ключи)')
 		pprint.pprint(self.MARKSLIST)
 
 	def io_get_pub_key(self) -> bytes:
-		print('Registrator. отдал свой публичный ключ, кому-то, кто запросил')
-		return pickle.dumps(self.public_key)
-	
+		print('Registrator. отдал свой публичный ключ')
+		return lib_blind.export_public_key(self.public_key)  # ← PEM-байты	
 
 	def scanS3SignRequests(self):
 		"сканирует файлы запросы в s3 и выкладывает туда же подписи, если ок"
@@ -85,13 +82,15 @@ class Registrator:
 														"input": boolshit, 
 														"sign": result
 													})
+
 	def _io_elector_sign(self,  mark_1, unknownBulshitInfo:int)->int:
 		# по признакам проверим избирателя, он как то себя представить должен. 
 		# тут просто код, который знает только он
 		if mark_1 not in self.MARKSLIST:
 			raise Exception("Ты не понятно кто и тебя нет в списках")
 		# подписываем его барахло
-		signResult_int =  lib_blind.signature(unknownBulshitInfo, self.private_key)
+		# ВАЖНО: unknownBulshitInfo — это уже слепое сообщение (int), его подписываем напрямую
+		signResult_int = pow(unknownBulshitInfo, self.private_key.d, self.private_key.n)
 		print(f'\nRegistrator. подписал для {mark_1} число {unknownBulshitInfo} , отправил ему подпись {signResult_int}\n')
 		return signResult_int
 	
@@ -103,21 +102,21 @@ class Agency:
 	published_encripted_ballots=[]
 	secret_keys=[]
 
-	def __init__(self, r:Registrator):
+	def __init__(self, r: Registrator):
 		self.r = r
-		rPubKeyInfo = pickle.loads(self.r.io_get_pub_key())
-		self.rPubKey = lib_blind.Key(rPubKeyInfo[0], rPubKeyInfo[1])
+		r_pub_key_pem = self.r.io_get_pub_key()
+		self.rPubKey = lib_blind.import_public_key(r_pub_key_pem)  # ← из PEM
 
 	def io_authorize_keys(self, payload):
 		e_public_key_pickled, e_signedHashOfPubKeyByRegistrator = payload
 
-		e_public_key = pickle.loads(e_public_key_pickled)
+		e_public_key = lib_blind.import_public_key(e_public_key_pickled)
 		e_hashOfElectorPubKey = hash_of_pub_key(e_public_key)
 		# check 1
 		if hash_of_pub_key(e_public_key) != e_hashOfElectorPubKey:
 			raise Exception('Agency. ваш публичный ключ не совпал с хешэм, который вы предоставили')
 		# check 2
-		hash_again = lib_blind.verefy(e_signedHashOfPubKeyByRegistrator, self.rPubKey)
+		hash_again = lib_blind.verify(e_signedHashOfPubKeyByRegistrator, self.rPubKey)
 		if hash_again != e_hashOfElectorPubKey:
 			raise Exception('Agency. проверка подписи хеша вашего ключа ключём Регистратора не пройдена')
 		self.authorized_keys.append({
@@ -137,7 +136,7 @@ class Agency:
 		"ПО избирателя ждет точной публикации , чтобы опубликовать и отправить в агенство ключи для расшифровки"
 		encripted_ballot = payload["encripted_ballot"]
 		pubKeyAsBytes = payload["public_key"]
-		e_pub_key = pickle.loads(pubKeyAsBytes)
+		e_pub_key = lib_blind.import_public_key(pubKeyAsBytes)
 		encripted_ballot_sign = payload["encripted_ballot_sign"]
 		# проверяем авторизован ли предлагаемый публичный ключ
 		isAuthorized = False
@@ -148,35 +147,46 @@ class Agency:
 		if not isAuthorized:
 			raise Exception("Agency. предложенный публичный ключ не авторизован")
 		# проверяем подпись
-		encripted_ballot_again = lib_blind.verefy(encripted_ballot_sign, e_pub_key)
-		if encripted_ballot != encripted_ballot_again:
+		encripted_ballot_bytes = lib_blind.int_to_bytes(encripted_ballot)
+		# Хешируем напрямую, как это делает lib_blind
+		expected_hash = lib_blind.hash_message_to_int(encripted_ballot_bytes)
+		recovered_hash = lib_blind.verify(encripted_ballot_sign, e_pub_key)
+		if recovered_hash != expected_hash:
 			raise Exception('Agency. подпись шифрованного бюлетеня не подходит. бюлетень отвергнут')
 		# всё ок. публикуем . 
 		self.published_encripted_ballots.append(payload)
 		print('\nAgency. проверил подпись Шифрованного бюлетня-ОК, проверил что этот публичный в списке авторизованных')
 		print('добавил шифрованный бюлетень в список опубликованных шифрованных бюлетней :-P')
-		print('у меня нет выбора : все ок и я не понимаю что в бюлетене, но судя по всему тот кто её прислал имеет право её прислать и я обязан её принять и опубликовать')
+		print('у меня нет выбора : все ок и я не понимаю, что в бюлетене, но судя по всему тот кто её прислал имеет право её прислать и я обязан её принять и опубликовать')
 
 	def io_get_public_published_encripted_ballots(self):
 		print('Agency. выдал список опубликованных бюлетней')
 		return self.published_encripted_ballots
 	
 
-	def io_submit_secret_keys(self, mark_2, public_key_asBytes, secret_keys:bytes, secret_keys_signed ):
-		e_pub_key = pickle.loads(public_key_asBytes)
-		# проверяем авторизован ли юзер 
-		isAuthorized = False
-		for t in self.authorized_keys:
-			if t['public_key'] == public_key_asBytes:
-				isAuthorized = True
-				break
+	def io_submit_secret_keys(self, mark_2, public_key_asBytes, secret_keys: bytes, secret_keys_signed: int):
+		# Импортируем публичный ключ избираетеля из PEM-байтов
+		e_pub_key = lib_blind.import_public_key(public_key_asBytes)
+		
+		# Проверяем, авторизован ли избиратель
+		isAuthorized = any(
+			t['public_key'] == public_key_asBytes 
+			for t in self.authorized_keys
+		)
 		if not isAuthorized:
 			raise Exception('Agency. вы не авторизованы')
-		# проверяет подпись
-		secret_keys_int = bytes_to_int(secret_keys)
-		if secret_keys_int != lib_blind.verefy(secret_keys_signed, e_pub_key):
+		
+		# Хешируем секретные ключи ТОЧНО ТАК ЖЕ, как это делает lib_blind.signature()
+		expected_hash = int.from_bytes(hashlib.sha256(secret_keys).digest(), 'big')
+		
+		# Восстанавливаем хеш из подписи
+		recovered_hash = lib_blind.verify(secret_keys_signed, e_pub_key)
+		
+		# Сравниваем хеши
+		if recovered_hash != expected_hash:
 			raise Exception('Agency. проверка подписи секретных ключей не пройдена')
-		# все ок - публикуем ключи
+		
+		# Всё ок — публикуем ключи
 		self.secret_keys.append({
 			"mark_2": mark_2,
 			"public_key": public_key_asBytes,
@@ -184,7 +194,7 @@ class Agency:
 			"secret_keys_sign": secret_keys_signed, 
 		})
 		print('Agency. проверил избирателя - он авторизован, проверил подпись им секретного ключа его шифрованного бюлетеня - ок, публикую секретный пароль от его бюлетеня')
-
+		
 	def io_get_public_secret_keys(self):
 		print('Agency. Отдаю список опубликованных паролей от бюлетеней')
 		return self.secret_keys
@@ -214,48 +224,48 @@ class Elector:
 	# знак, что наши ключи приняты как авторизованные для голосования
 	is_keys_is_authorised = False
 
-	def __init__(self, r:Registrator, a:Agency, s3AddOnly:S3LikeFileUploadAccount):
+	def __init__(self, r: Registrator, a: Agency, s3AddOnly: S3LikeFileUploadAccount):
 		self.s3AddOnly = s3AddOnly
 		self.mark_1 = random.randint(2, 2 ** 64)
 		self.mark_2 = random.randint(2, 2 ** 64)
-		self.r = r; self.a = a
+		self.r = r
+		self.a = a
 
-		# надо пойти ножками в регистратор и сказать им по каким признакам они должны меня авторизовывать у себя. паспорт согласовать например
+		# Загружаем публичный ключ регистратора (сериализованный → объект)
+		r_pub_key_pem = self.r.io_get_pub_key()  # bytes (PEM)
+		self.rPubKey = lib_blind.import_public_key(r_pub_key_pem)  # ← Вот здесь!
+
 		self.r.MARKSLIST.append(self.mark_1)
 		print('Elector. я сходил ножками в Регистратор и убедился, что способ моей авторизации у них согласован')
 		print('для них я буду', self.mark_1)
-		# регистрация ключей и авторизация ключей должна быть выполнена еще до начала голосания, 
-		# чтобы исключить вбросы.
 		self.register_new_keyPair()
 		self.authorize_keys()
 		print('\nElector. я завершил регистрацию своих новых ключей для голосования и авторизовал их еще до начала голосования, чтобы списки ключей тоже были фиксированы чтобы исключить вбросы')
-
 	
 	def register_new_keyPair(self):
-		# содаём и регистрируем подписываем (только Публ) у регистратора "вслепую" пару ключей
-		# делам новую пару ключей для этого голосования
-		self.public_key, self.private_key = lib_blind.keygen(2 ** N)
+		self.public_key, self.private_key = lib_blind.keygen(N)
 
-		# вслепую подпишем эту пару в регистраторе, представившись "признаками" которые заранее согласованы с регисратором
-		# готовим слепую подпись
+		# Хешируем ОБЪЕКТ ключа (не его PEM!)
 		self.hashOfElectorPubKey = hash_of_pub_key(self.public_key)
-		msg = self.hashOfElectorPubKey
-		# print('\nElector. hash of my pub_key is\n', msg)
-		# загрузили себе публичный ключ
-		if not self.rPubKey:
-			keyInf = pickle.loads(self.r.io_get_pub_key())
-			self.rPubKey = lib_blind.Key(keyInf[0], keyInf[1])
-			assert self.rPubKey == self.r.public_key # TODO remove
 
-		self.blinded, self.blindInverse    =    lib_blind.blind(msg, self.r.public_key )#
+		# Получаем PEM для передачи по сети
+		pub_key_pem = lib_blind.export_public_key(self.public_key)
 
-		# создадим в публичном поле запрос на подпись нашего ключа
-		self.s3AddOnly.uploadToFolderWithPostfixRaname(REGISTRATORSIGNREQUESTFOLDER, str(self.mark_1), 
-												 {	"mark_1": self.mark_1, 
-													"input": self.blinded
-													})
-		
-		# имитация периодической обработки входящих запросов подписи TODO убрать в реальности
+		# Слепим хеш (как число), но blind() принимает bytes → преобразуем хеш в bytes
+		# Однако: наш lib_blind.blind() ожидает bytes и сам хеширует!
+		# Поэтому передаём не хеш, а сам ключ в bytes (DER или PEM — неважно, лишь бы одинаково)
+		# Но лучше — передавать DER для каноничности
+
+		pub_key_der = self.public_key.export_key(format='DER')
+		self.blinded, self.blindInverse = lib_blind.blind(pub_key_der, self.r.public_key)
+
+		# Загружаем в S3: blinded (int) и mark_1
+		self.s3AddOnly.uploadToFolderWithPostfixRaname(
+			REGISTRATORSIGNREQUESTFOLDER, str(self.mark_1),
+			{"mark_1": self.mark_1, "input": self.blinded}
+		)
+
+		# имитация периодической обработки входящих запросов подписи TODO убрать в реальности (там будет async)
 		self.r.scanS3SignRequests()
 
 		# мы тут просто ждём что наш запрос обработается
@@ -271,21 +281,22 @@ class Elector:
 			if not isPublished: time.sleep(10)
 		
 
-		# signedBlind_int:int = self.r._io_elector_sign(self.mark_1, self.blinded)
 		# тут "магия" мы расчитали подпись. она такая как будто регистратор видел наш публичный ключ, а он не видел.
-		self.signedHashOfPubKeyByRegistrator = lib_blind.unblind(signedBlind_int, self.blindInverse, self.r.public_key) # 
-				
+		self.signedHashOfPubKeyByRegistrator = lib_blind.unblind(signedBlind_int, self.blindInverse, self.r.public_key)
+
 		# на всякий случай проверим сами корректность подписи	
-		msg_again = lib_blind.verefy(self.signedHashOfPubKeyByRegistrator, self.rPubKey) #
-		if msg != msg_again:
+		expected_hash = hash_of_pub_key(self.public_key)
+  
+		msg_again = lib_blind.verify(self.signedHashOfPubKeyByRegistrator, self.rPubKey)
+		if msg_again != expected_hash:
 			raise Exception('Elector. Error. шифрование не дало того эффекта который требуется для голосование. почему ? наверное ваш blind не комутативен')
 
 		print('\nElector. регистратор подписал нам хеш публ ключа, не глядя. вычисленная из всех данных корректная подпись нашего публичного ключа=\n', self.signedHashOfPubKeyByRegistrator)
 	
 	def authorize_keys(self):
 		"у Агенства акторизуем ключи и ждём, чтобы оно публично подтвердило, что ключи приняты"
-		payload = (	pickle.dumps(self.public_key), 
-			 		self.signedHashOfPubKeyByRegistrator )
+		payload = (	lib_blind.export_public_key(self.public_key), 
+					self.signedHashOfPubKeyByRegistrator )
 		self.a.io_authorize_keys(payload)
 		# ждём пока Агентство открыто для всех опубликует наши ключи , как авторизованные
 		isPublished = False
@@ -294,7 +305,7 @@ class Elector:
 				break
 			aut_keys = self.a.io_get_public_authorized_keys()
 			for _, ak in enumerate(aut_keys):
-				if pickle.dumps(self.public_key)==ak['public_key'] :
+				if lib_blind.export_public_key(self.public_key)==ak['public_key'] :
 					# значит опубликовали... это сигнал, чтобы публиковать секреты
 					isPublished = True
 					break 
@@ -310,14 +321,14 @@ class Elector:
 		# шифровальщик
 		aes = pyaes.AESModeOfOperationCTR(self.secret_keys)
 		# шифруем наше волеизъявление симметрично ключём secret_keys
-		encripted_ballot = aes.encrypt(candidate)
-		encripted_ballot_int = bytes_to_int(encripted_ballot)
+		encripted_ballot = aes.encrypt(candidate.encode())  # Кодируем строку в байты
+		encripted_ballot_int = lib_blind.bytes_to_int(encripted_ballot)
 		# 
-		encripted_ballot_sign = lib_blind.signature(encripted_ballot_int, self.private_key)
+		encripted_ballot_sign = lib_blind.signature(encripted_ballot, self.private_key)
 		payload = {
 			# используем другую метку, не ту, которой авторизовывались на регистраторе
 			"mark_2": self.mark_2,
-			"public_key": pickle.dumps(self.public_key), 
+			"public_key": lib_blind.export_public_key(self.public_key), 
 			"encripted_ballot": encripted_ballot_int, 
 			"encripted_ballot_sign":encripted_ballot_sign
 		}
@@ -332,9 +343,8 @@ class Elector:
 					isPublished = True
 					break
 		# теперь публикуем ключи для расшифровки
-		secret_keys_int = bytes_to_int(self.secret_keys)
-		secret_keys_signed = lib_blind.signature(secret_keys_int, self.private_key)
-		self.a.io_submit_secret_keys(self.mark_2, pickle.dumps(self.public_key), self.secret_keys, secret_keys_signed)
+		secret_keys_signed = lib_blind.signature(self.secret_keys, self.private_key)
+		self.a.io_submit_secret_keys(self.mark_2, lib_blind.export_public_key(self.public_key), self.secret_keys, secret_keys_signed)
 		# todo убедиться что ключи опубликованы, иначе отправить еще раз 
 
 
@@ -404,7 +414,6 @@ for d in list_encripted:
 		print('расшифруем бюлетень')
 		aes = pyaes.AESModeOfOperationCTR(secret_key)
 		# шифруем наше волеизъявление симметрично ключём secret_keys
-		encripted_ballot_bytes = int_to_bytes(encripted_ballot)
+		encripted_ballot_bytes = lib_blind.int_to_bytes(encripted_ballot)
 		ballot = aes.decrypt(encripted_ballot_bytes)
 		print('найден ГОЛОС ЗА КАНДИДАТА:', ballot.decode())
-	
