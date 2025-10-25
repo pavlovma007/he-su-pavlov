@@ -1,5 +1,7 @@
+# Здесь просто демонстрируется ПРИМЕР
+# самого алгоритма слепой подписи - сам принцип её
+
 import rsa # TODO убрать зависимость
-#from fractions import gcd
 from random import randrange, random
 from collections import namedtuple
 from math import log, gcd
