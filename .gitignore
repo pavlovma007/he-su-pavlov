@@ -1,0 +1,10 @@
+# Окружение и кэши — не коммитить
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+
+# Закрытый ключ регистратора и архив для установки — НЕ КОММИТИТЬ
+registrar_privkey.pem
+vote-game.tar
+vote-game.tar.gz

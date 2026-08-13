@@ -1,0 +1,18 @@
+{
+  "ftp": {
+    "host": "192.168.1.10",
+    "port": 21,
+    "user": "vote",
+    "password": "vote",
+    "base_path": "vote-game"
+  },
+  "election": "Выборы того «чем мы хотим подкрепиться»",
+  "candidates": [
+    { "id": 1, "name": "мясо и шашлыки" },
+    { "id": 2, "name": "сладенькое" }
+  ],
+  "agency": {
+    "batch_seconds": 25,
+    "key_path": "registrar_privkey.pem"
+  }
+}

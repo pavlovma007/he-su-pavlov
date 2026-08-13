@@ -1,0 +1,4 @@
+pyaes==1.6.1
+segno==1.6.1
+pyzbar==0.1.9
+pycryptodome==3.23.0
