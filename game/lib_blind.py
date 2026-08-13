@@ -1,6 +1,6 @@
-from Crypto.PublicKey import RSA
-from Crypto.Util.number import inverse, GCD
-from Crypto.Hash import SHA256
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Util.number import inverse, GCD
+from Cryptodome.Hash import SHA256
 import random
 
 
@@ -37,7 +37,7 @@ def import_private_key(pem_bytes) -> RSA.RsaKey:
 
 
 def keygen(bits):
-	"""Генерирует пару ключей (публичный, приватный) с использованием PyCryptodome."""
+	"""Генерирует пару ключей (публичный, приватный) с использованием PyCryptodomex."""
 	key = RSA.generate(bits)
 	return key.publickey(), key
 

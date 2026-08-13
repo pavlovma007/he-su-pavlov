@@ -16,7 +16,7 @@ pkg install -y python termux-api clang zbar python-pillow 2>/dev/null \
 echo "==> Python-зависимости"
 pip install pyaes==1.6.1 segno==1.6.1 pyzbar==0.1.9 2>/dev/null \
   || pip install pyaes segno pyzbar
-pkg install -y python-pycryptodome 2>/dev/null || pip install pycryptodome
+pkg install -y python-pycryptodomex 2>/dev/null || pip install pycryptodomex
 
 echo "==> Каталог игры"
 mkdir -p "$VOTE_DIR"
