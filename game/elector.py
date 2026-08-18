@@ -22,6 +22,8 @@ class ElectorEngine:
         self.key_path = key_path
         self.mark_1 = None
         self.mark_2 = None
+        self.mark_auth = None
+        self._marks_loaded = False
         self.public_key = None
         self.private_key = None
         self.registrar_pub = None
@@ -44,29 +46,83 @@ class ElectorEngine:
     def phase(self):
         return pr.current_phase(self.store)
 
-    def _derive_mark(self, salt):
-        der = self.public_key.export_key(format="DER")
-        h = hashlib.sha256(der + salt).digest()
-        return int.from_bytes(h, "big") % 2 ** 63
+    # --- метки: случайные имена файлов, известные только владельцу ---
+    #
+    # Метка — это НЕ идентификатор личности и не хэш от ключа, а просто случайное
+    # имя файла: участник находит по нему СВОИ документы в общей куче, не скачивая
+    # весь каталог (см. elliptic-voting.md, раздел 5.1). Хранится локально в
+    # state-файле рядом с ключом, поэтому переживает перезапуск. Посторонний не
+    # может вычислить метки из публичных данных.
+
+    def _state_path(self):
+        return os.path.splitext(self.key_path)[0] + "_state.json"
+
+    def _save_state(self):
+        if None in (self.mark_1, self.mark_2, self.mark_auth):
+            return
+        path = self._state_path()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"mark_1": self.mark_1, "mark_2": self.mark_2,
+                       "mark_auth": self.mark_auth}, f,
+                      ensure_ascii=False, indent=2)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+
+    def _ensure_marks(self):
+        if self._marks_loaded:
+            return
+        self._marks_loaded = True
+        if os.path.exists(self._state_path()):
+            try:
+                with open(self._state_path(), "r", encoding="utf-8") as f:
+                    st = json.load(f)
+                self.mark_1 = st.get("mark_1")
+                self.mark_2 = st.get("mark_2")
+                self.mark_auth = st.get("mark_auth")
+            except Exception:
+                self.mark_1 = self.mark_2 = self.mark_auth = None
+        if None in (self.mark_1, self.mark_2, self.mark_auth):
+            if self.mark_1 is None:
+                self.mark_1 = random.randint(2, 2 ** 63)
+            if self.mark_2 is None:
+                self.mark_2 = random.randint(2, 2 ** 63)
+            if self.mark_auth is None:
+                self.mark_auth = random.randint(2, 2 ** 63)
+            self._save_state()
 
     def generate_mark(self, mark_1=None):
-        # Метка выводится из ключа: перезапуск — та же метка, та же личность.
         if mark_1 is not None:
             self.mark_1 = mark_1
-        elif self.public_key is not None:
-            self.mark_1 = self._derive_mark(b"mark-1")
+            self._save_state()
+            self._marks_loaded = True
         else:
-            self.mark_1 = random.randint(2, 2 ** 63)
+            self._ensure_marks()
         return self.mark_1
 
     def generate_mark2(self, mark_2=None):
         if mark_2 is not None:
             self.mark_2 = mark_2
-        elif self.public_key is not None:
-            self.mark_2 = self._derive_mark(b"mark-2")
+            self._save_state()
+            self._marks_loaded = True
         else:
-            self.mark_2 = random.randint(2, 2 ** 63)
+            self._ensure_marks()
         return self.mark_2
+
+    def _read_my(self, folder, mark, pred=None):
+        """Свой документ в общей папке: ищет по префиксу имени файла
+        ({mark}-…json), не скачивая весь каталог."""
+        prefix = f"{int(mark)}-"
+        for name in self.store.list_filenames(folder):
+            if name.startswith(prefix):
+                try:
+                    data = json.loads(self.store.read_text(f"{folder}/{name}"))
+                except Exception:
+                    continue
+                if pred is None or pred(data):
+                    return data
+        return None
 
     def generate_keys(self):
         self.public_key, self.private_key = lib_blind.keygen(2048)
@@ -98,15 +154,15 @@ class ElectorEngine:
         return pr.pretty_json({"mark": self.mark_1})
 
     def is_approved(self):
-        return any(int(m["mark"]) == self.mark_1
-                   for m in self.store.list_folder(pr.F_MARKS))
+        return self._read_my(pr.F_MARKS, self.mark_1) is not None
 
     def try_fetch_signature(self):
-        for s in self.store.list_folder(pr.F_SIGN_RESULTS):
-            if int(s["mark"]) == self.mark_1 and int(s["blinded"]) == self._blinded:
-                self.signed_hash = lib_blind.unblind(int(s["sign"]), self._blind_r,
-                                                     self.registrar_pub)
-                return True
+        r = self._read_my(pr.F_SIGN_RESULTS, self.mark_1,
+                          pred=lambda s: int(s.get("blinded")) == self._blinded)
+        if r is not None:
+            self.signed_hash = lib_blind.unblind(int(r["sign"]), self._blind_r,
+                                                 self.registrar_pub)
+            return True
         return False
 
     def try_authorize(self):
@@ -115,23 +171,17 @@ class ElectorEngine:
         if not self._authorized_uploaded:
             pem = pr.pubkey_to_pem(self.public_key)
             payload = pr.make_authorize_payload(pem, self.signed_hash)
-            self.store.upload_json(pr.F_AUTHORIZED_KEYS, str(self.mark_1), payload)
+            self.store.upload_json(pr.F_AUTHORIZED_KEYS, str(self.mark_auth), payload)
             self._authorized_uploaded = True
         return True
 
     def is_authorized(self):
-        pem = pr.pubkey_to_pem(self.public_key)
-        return any(a.get("public_key_pem") == pem
-                   for a in self.store.list_folder(pr.F_AUTHORIZED_KEYS))
+        return self._read_my(pr.F_AUTHORIZED_KEYS, self.mark_auth) is not None
 
     def find_my_ballot(self):
-        """Бюллетень этой метки на FTP — понятно, проголосовал ли уже участник."""
-        pem = pr.pubkey_to_pem(self.public_key)
-        for b in self.store.list_folder(pr.F_BALLOTS):
-            if int(b.get("mark_2")) == self.mark_2 and b.get("public_key_pem") == pem:
-                self.ballot = b
-                return b
-        return None
+        """Свой бюллетень на FTP по своей метке — понятно, проголосовал ли уже."""
+        self.ballot = self._read_my(pr.F_BALLOTS, self.mark_2)
+        return self.ballot
 
     def vote(self, candidate_id):
         self.secret_key = self._derive_secret_key()
@@ -146,12 +196,11 @@ class ElectorEngine:
     def ballot_published(self):
         if self.ballot is None:
             return False
-        return any(b.get("ballot_enc_b64") == self.ballot["ballot_enc_b64"]
-                   for b in self.store.list_folder(pr.F_BALLOTS))
+        b = self._read_my(pr.F_BALLOTS, self.mark_2)
+        return b is not None and b.get("ballot_enc_b64") == self.ballot["ballot_enc_b64"]
 
     def secret_key_published(self):
-        return any(int(s.get("mark_2")) == self.mark_2
-                   for s in self.store.list_folder(pr.F_SECRET_KEYS))
+        return self._read_my(pr.F_SECRET_KEYS, self.mark_2) is not None
 
     def submit_secret_key(self):
         if self.secret_key is None:

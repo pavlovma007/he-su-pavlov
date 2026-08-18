@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import os
 
@@ -7,6 +8,28 @@ from agency import AgencyEngine
 from elector import ElectorEngine, _load_or_fetch_config
 
 CANDIDATES = [{"id": 1, "name": "Кандидат №1"}, {"id": 2, "name": "Кандидат №2"}]
+
+
+def test_marks_not_derived_from_public_key(store, tmp_path):
+    """Метки — случайные имена, не выводимые из открытого ключа: регистратор,
+    видевший метку, не может вычислить по ней ключ (см. elliptic-voting.md, 5.1)."""
+    agency = AgencyEngine(store, CANDIDATES, key_path=str(tmp_path / "reg.pem"))
+    agency.start()   # публикует meta, которое читает ElectorEngine
+    e = ElectorEngine(store, nickname="Кот", key_path=str(tmp_path / "cat.pem"))
+    e.generate_keys()
+    e.generate_mark()
+    e.generate_mark2()
+    der = e.public_key.export_key(format="DER")
+    old_style_1 = int.from_bytes(hashlib.sha256(der + b"mark-1").digest(), "big") % 2 ** 63
+    old_style_2 = int.from_bytes(hashlib.sha256(der + b"mark-2").digest(), "big") % 2 ** 63
+    assert e.mark_1 != old_style_1
+    assert e.mark_2 != old_style_2
+    # свежие случайные метки: у разных избирателей они разные
+    other = ElectorEngine(store, nickname="Пёс", key_path=str(tmp_path / "dog.pem"))
+    other.generate_keys()
+    other.generate_mark()
+    other.generate_mark2()
+    assert len({e.mark_1, other.mark_1, e.mark_2, other.mark_2}) == 4
 
 
 def test_registration_and_authorization(store, tmp_path):
@@ -60,8 +83,9 @@ def test_vote_and_submit_secret_key(store, tmp_path):
     assert pr.decrypt_ballot(ballot, keys[0]["secret_key_b64"]) == "1"
 
 
-def test_restart_keeps_identity_without_state_file(store, tmp_path):
-    """Перезапуск — та же метка и тот же ключ шифрования: личность в ключе, не в файле."""
+def test_restart_keeps_identity_via_state_file(store, tmp_path):
+    """Перезапуск — та же метка и тот же ключ шифрования: случайные метки
+    переживают перезапуск через state-файл рядом с ключом."""
     agency = AgencyEngine(store, CANDIDATES, key_path=str(tmp_path / "reg.pem"))
     agency.start()   # публикует meta: ключ регистратора и список кандидатов
 
@@ -73,7 +97,7 @@ def test_restart_keeps_identity_without_state_file(store, tmp_path):
     first.generate_mark2()
     first.vote(1)
 
-    # «перезапуск»: новый процесс, тот же файл ключа, никакого state-файла
+    # «перезапуск»: новый процесс, тот же файл ключа + state-файл с метками
     again = ElectorEngine(store, nickname="Участник", key_path=key_path)
     again.load_or_create_keys()
     again.generate_mark()
@@ -81,9 +105,10 @@ def test_restart_keeps_identity_without_state_file(store, tmp_path):
 
     assert again.mark_1 == first.mark_1
     assert again.mark_2 == first.mark_2
+    assert again.mark_auth == first.mark_auth
     assert again._derive_secret_key() == first.secret_key  # ключ расшифровки не потерян
-    # и не создалось никакого state-файла — личность живёт только в ключе
-    assert set(os.listdir(tmp_path)) == {"reg.pem", "cat.pem"}
+    # метки живут в state-файле рядом с ключом (личность — в ключе + метках)
+    assert set(os.listdir(tmp_path)) == {"reg.pem", "cat.pem", "cat_state.json"}
 
 
 def _test_config(ftp_server, store, **extra):
