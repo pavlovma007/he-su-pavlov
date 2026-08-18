@@ -30,7 +30,7 @@ chmod +x *.py
 
 if [ ! -f config.json ]; then
   echo "==> ВНИМАНИЕ: config.json не найден в архиве."
-  echo "    Запусти ./elector.py — он спросит адрес сервера и сам возьмёт config.json оттуда."
+  echo "    Запусти ./elector.py - он спросит адрес сервера и сам возьмёт config.json оттуда."
 fi
 
 echo ""

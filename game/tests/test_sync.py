@@ -5,7 +5,7 @@ from sync import FtpStore
 
 
 def test_connect_retries_transient_failure():
-    """Сервер пару раз отвечает «421 Login timeout» — _connect должен пережить
+    """Сервер пару раз отвечает «421 Login timeout» - _connect должен пережить
     это и вернуть соединение с 3-й попытки, а не уронить скрипт."""
     login_attempts = []
 

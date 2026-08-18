@@ -41,7 +41,7 @@ def test_full_game(store, tmp_path):
     _sleep()
     agency.approve_mark(voters[0].mark_1)
     agency.approve_mark(voters[1].mark_1)
-    # одобрения не появляются мгновенно — это часть приватности
+    # одобрения не появляются мгновенно - это часть приватности
     assert store.list_folder(pr.F_MARKS) == []
     agency.flush_pending()
     assert set(agency.public_approved_marks()) == {voters[0].mark_1, voters[1].mark_1}
@@ -69,7 +69,7 @@ def test_full_game(store, tmp_path):
     voters[1].vote(2)
     rogue.vote(1)                              # появится, но не зачтётся
 
-    # повторный бюллетень от той же метки (после паузы — чтобы метки времени различались)
+    # повторный бюллетень от той же метки (после паузы - чтобы метки времени различались)
     _sleep()
     aes2 = pyaes.AESModeOfOperationCTR(os.urandom(16))
     ct2 = aes2.encrypt(b"3")
@@ -115,7 +115,7 @@ def test_full_game(store, tmp_path):
     assert state["phase"] == "RESULT"
 
     # ВАЖНО (правка контроллера): dict-компрехеншен {r["mark_2"]: r} оставил бы
-    # ПОСЛЕДНИЙ ряд по mark_2 — у Кота есть повторный бюллетень, и он бы перекрыл
+    # ПОСЛЕДНИЙ ряд по mark_2 - у Кота есть повторный бюллетень, и он бы перекрыл
     # УЧТЁННЫЙ. setdefault берёт первый (зарегистрированный, он раньше по ts).
     by = {}
     for r in state["rows"]:
@@ -134,7 +134,7 @@ def test_full_game(store, tmp_path):
     assert by[late.mark_2]["status"] == "НЕ УЧТЁН"
     assert "закрыто" in by[late.mark_2]["reason"]
 
-    # повторный бюллетень (та же mark_2, что у Кота) — не зачтён
+    # повторный бюллетень (та же mark_2, что у Кота) - не зачтён
     dup_row = next(r for r in state["rows"]
                    if r["mark_2"] == voters[0].mark_2 and r["candidate_id"] is None)
     assert dup_row["status"] == "НЕ УЧТЁН"

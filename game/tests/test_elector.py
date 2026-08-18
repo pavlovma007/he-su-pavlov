@@ -11,7 +11,7 @@ CANDIDATES = [{"id": 1, "name": "Кандидат №1"}, {"id": 2, "name": "К�
 
 
 def test_marks_not_derived_from_public_key(store, tmp_path):
-    """Метки — случайные имена, не выводимые из открытого ключа: регистратор,
+    """Метки - случайные имена, не выводимые из открытого ключа: регистратор,
     видевший метку, не может вычислить по ней ключ (см. elliptic-voting.md, 5.1)."""
     agency = AgencyEngine(store, CANDIDATES, key_path=str(tmp_path / "reg.pem"))
     agency.start()   # публикует meta, которое читает ElectorEngine
@@ -84,7 +84,7 @@ def test_vote_and_submit_secret_key(store, tmp_path):
 
 
 def test_restart_keeps_identity_via_state_file(store, tmp_path):
-    """Перезапуск — та же метка и тот же ключ шифрования: случайные метки
+    """Перезапуск - та же метка и тот же ключ шифрования: случайные метки
     переживают перезапуск через state-файл рядом с ключом."""
     agency = AgencyEngine(store, CANDIDATES, key_path=str(tmp_path / "reg.pem"))
     agency.start()   # публикует meta: ключ регистратора и список кандидатов
@@ -107,7 +107,7 @@ def test_restart_keeps_identity_via_state_file(store, tmp_path):
     assert again.mark_2 == first.mark_2
     assert again.mark_auth == first.mark_auth
     assert again._derive_secret_key() == first.secret_key  # ключ расшифровки не потерян
-    # метки живут в state-файле рядом с ключом (личность — в ключе + метках)
+    # метки живут в state-файле рядом с ключом (личность - в ключе + метках)
     assert set(os.listdir(tmp_path)) == {"reg.pem", "cat.pem", "cat_state.json"}
 
 
@@ -120,7 +120,7 @@ def _test_config(ftp_server, store, **extra):
 
 
 def test_load_or_fetch_config_prefers_server(store, ftp_server, tmp_path):
-    """На сервере есть config.json (его публикует агентство) — берём его,
+    """На сервере есть config.json (его публикует агентство) - берём его,
     локальный файл перезаписывается."""
     server_cfg = _test_config(ftp_server, store, election="Тема с сервера")
     store.upload_text("config.json", json.dumps(server_cfg, ensure_ascii=False))
@@ -137,7 +137,7 @@ def test_load_or_fetch_config_prefers_server(store, ftp_server, tmp_path):
 
 
 def test_load_or_fetch_config_falls_back_to_local(store, ftp_server, tmp_path):
-    """Сервер недоступен или config.json ещё не опубликован — работаем с локальным."""
+    """Сервер недоступен или config.json ещё не опубликован - работаем с локальным."""
     local_cfg = _test_config(ftp_server, store, election="Тема локальная")
     local = tmp_path / "config.json"
     local.write_text(json.dumps(local_cfg, ensure_ascii=False), encoding="utf-8")

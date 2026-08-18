@@ -50,7 +50,7 @@ def _parse_authorized_marks(valid_auth):
 
 
 def render_wall_html(state, generated_at=None) -> str:
-    # страница открывается по ftp:// или из файла — без внешних ресурсов,
+    # страница открывается по ftp:// или из файла - без внешних ресурсов,
     # обновляется сама через JS каждые 7 секунд
     lines = [
         "<!DOCTYPE html><html><head><meta charset='utf-8'>",
@@ -72,11 +72,11 @@ def render_wall_html(state, generated_at=None) -> str:
         f"<div><i>Страница обновлена: {_esc(generated_at)} · автообновление каждые 7 секунд</i></div>",
         "<h2>Списки</h2>",
         (f"<div><b>Допущенные метки:</b> "
-         f"{', '.join(map(str, state['approved_marks'])) or '—'}</div>"),
+         f"{', '.join(map(str, state['approved_marks'])) or '-'}</div>"),
         (f"<div><b>Авторизованные ключи (метки):</b> "
-         f"{', '.join(map(str, state['authorized_marks'])) or '—'}</div>"),
+         f"{', '.join(map(str, state['authorized_marks'])) or '-'}</div>"),
         (f"<div><b>Ключи расшифровки (mark_2):</b> "
-         f"{', '.join(map(str, state['secret_keys_marks'])) or '—'}</div>"),
+         f"{', '.join(map(str, state['secret_keys_marks'])) or '-'}</div>"),
         "<h2>Итог</h2><table><tr><th>Кандидат</th><th>Голосов</th></tr>",
     ]
     for c in state["candidates"]:
@@ -85,7 +85,7 @@ def render_wall_html(state, generated_at=None) -> str:
     lines.append("<h2>Бюллетени</h2><table><tr><th>mark_2</th><th>Статус</th><th>Причина</th><th>Кандидат</th></tr>")
     for r in state["rows"]:
         cls = "ok" if r["status"] == "УЧТЁН" else "no"
-        cand = _esc(r["candidate_name"]) if r["candidate_name"] else "—"
+        cand = _esc(r["candidate_name"]) if r["candidate_name"] else "-"
         reason = _esc(r["reason"]) if r["reason"] else ""
         lines.append(f"<tr><td>{_esc(str(r['mark_2']))}</td><td class='{cls}'>{_esc(r['status'])}</td>"
                      f"<td>{reason}</td><td>{cand}</td></tr>")
@@ -100,7 +100,7 @@ def render_wall_html(state, generated_at=None) -> str:
 def publish_wall(store, generated_at=None) -> str:
     """Вычисляет страницу стены из публичных файлов и заливает её в meta/index.html.
 
-    meta/index.html — единственный перезаписываемый файл («живой экран»);
+    meta/index.html - единственный перезаписываемый файл («живой экран»);
     все документы рекорда остаются append-only.
     """
     if generated_at is None:
@@ -119,7 +119,7 @@ def print_report(state) -> None:
     print("Бюллетеней:", len(state["rows"]), "· ключей расшифровки:", state["secret_keys_count"])
     print()
     for r in state["rows"]:
-        reason = f" — {r['reason']}" if r["reason"] else ""
+        reason = f" - {r['reason']}" if r["reason"] else ""
         cand = f" → {r['candidate_name']}" if r["candidate_name"] else ""
         print(f"  {r['mark_2']}: {r['status']}{reason}{cand}")
     print()

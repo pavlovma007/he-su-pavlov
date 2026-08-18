@@ -19,7 +19,7 @@ def test_start_publishes_meta(store, tmp_path):
 
 
 def test_start_publishes_config_to_server(store, tmp_path):
-    """Агентство кладёт свой config.json на сервер — участники берут его оттуда."""
+    """Агентство кладёт свой config.json на сервер - участники берут его оттуда."""
     a = AgencyEngine(store, CANDIDATES, key_path=str(tmp_path / "reg.pem"))
     cfg_file = tmp_path / "config.json"
     cfg_file.write_text('{"election": "Моя тема выборов"}', encoding="utf-8")
@@ -34,7 +34,7 @@ def test_approve_is_batched_not_immediate(store, tmp_path):
     a.start()
     a.approve_mark(17)
     a.approve_mark(42)
-    # одобрения ещё не на FTP — приватность: нельзя связать «вышел» и «файл появился»
+    # одобрения ещё не на FTP - приватность: нельзя связать «вышел» и «файл появился»
     assert store.list_folder(pr.F_MARKS) == []
     a.flush_pending()
     assert a.public_approved_marks() == [17, 42]
@@ -59,7 +59,7 @@ def test_process_once_signs_only_approved(store, tmp_path):
 def test_set_phase_and_current(store, tmp_path):
     a = AgencyEngine(store, CANDIDATES, key_path=str(tmp_path / "reg.pem"))
     a.start()
-    time.sleep(1.1)   # фазы пишутся в одну секунду — гарантируем разные ts для детерминированной сортировки
+    time.sleep(1.1)   # фазы пишутся в одну секунду - гарантируем разные ts для детерминированной сортировки
     a.set_phase("VOTING")
     assert a.phase() == "VOTING"
 

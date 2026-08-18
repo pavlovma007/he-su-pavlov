@@ -48,7 +48,7 @@ class ElectorEngine:
 
     # --- метки: случайные имена файлов, известные только владельцу ---
     #
-    # Метка — это НЕ идентификатор личности и не хэш от ключа, а просто случайное
+    # Метка - это НЕ идентификатор личности и не хэш от ключа, а просто случайное
     # имя файла: участник находит по нему СВОИ документы в общей куче, не скачивая
     # весь каталог (см. elliptic-voting.md, раздел 5.1). Хранится локально в
     # state-файле рядом с ключом, поэтому переживает перезапуск. Посторонний не
@@ -131,7 +131,7 @@ class ElectorEngine:
         os.chmod(self.key_path, 0o600)
 
     def load_or_create_keys(self):
-        """Ключ с прошлого запуска = та же личность. Нет ключа — создаём новый."""
+        """Ключ с прошлого запуска = та же личность. Нет ключа - создаём новый."""
         if os.path.exists(self.key_path):
             with open(self.key_path, "rb") as f:
                 self.private_key = lib_blind.import_private_key(f.read())
@@ -179,7 +179,7 @@ class ElectorEngine:
         return self._read_my(pr.F_AUTHORIZED_KEYS, self.mark_auth) is not None
 
     def find_my_ballot(self):
-        """Свой бюллетень на FTP по своей метке — понятно, проголосовал ли уже."""
+        """Свой бюллетень на FTP по своей метке - понятно, проголосовал ли уже."""
         self.ballot = self._read_my(pr.F_BALLOTS, self.mark_2)
         return self.ballot
 
@@ -214,7 +214,7 @@ class ElectorEngine:
 
 def _try_authorize(e):
     """Пытается опубликовать авторизацию ключа и проверяет её появление.
-    Транзиентные ошибки FTP не роняют мастер — возвращается False, и вызов
+    Транзиентные ошибки FTP не роняют мастер - возвращается False, и вызов
     повторяется следующим опросом _wait_until."""
     try:
         e.try_authorize()
@@ -229,9 +229,9 @@ def _save_config(cfg, path):
 
 
 def _load_or_fetch_config(config_path):
-    """Берём config.json с сервера — его публикует агентство при запуске.
+    """Берём config.json с сервера - его публикует агентство при запуске.
 
-    Локальный файл — просто кэш для старта и офлайна. Если его нет, один раз
+    Локальный файл - просто кэш для старта и офлайна. Если его нет, один раз
     спрашиваем адрес сервера и дальше тянем полный config оттуда же.
     """
     cfg = None
@@ -241,7 +241,7 @@ def _load_or_fetch_config(config_path):
         except Exception as e:
             print("⚠️ Не прочитался локальный config.json:", e)
     if cfg is None:
-        print("Локального config.json нет — спрошу, где сервер игры.")
+        print("Локального config.json нет - спрошу, где сервер игры.")
         host = input("Адрес FTP-сервера: ").strip()
         user = input("Логин FTP: ").strip()
         password = input("Пароль FTP: ").strip()
@@ -258,7 +258,7 @@ def _load_or_fetch_config(config_path):
 
 
 def _wait_until(pred, what, timeout=None):
-    """Ждать сколько нужно. timeout=None — бесконечно, выход только Ctrl+C:
+    """Ждать сколько нужно. timeout=None - бесконечно, выход только Ctrl+C:
     участник может ждать регистратора сколько угодно."""
     start = time.time()
     while timeout is None or time.time() - start < timeout:
@@ -266,7 +266,7 @@ def _wait_until(pred, what, timeout=None):
             if pred():
                 return True
         except (ftplib.all_errors, OSError):
-            pass   # связь прихрамывает — просто ждём дальше
+            pass   # связь прихрамывает - просто ждём дальше
         time.sleep(5)
     print(f"⚠️  таймаут ожидания: {what}")
     return False
@@ -303,7 +303,7 @@ def _main():
     print(e.mark_1)
 
     if e.is_authorized():
-        print("Твой ключ уже авторизован — продолжаем с того же места.")
+        print("Твой ключ уже авторизован - продолжаем с того же места.")
     else:
         qr_text = e.register_begin()   # свежий запрос на подпись
         print(render_qr_terminal(qr_text))
@@ -324,8 +324,8 @@ def _main():
         try:
             ph = e.phase()
         except (ftplib.all_errors, OSError):
-            # связь с FTP прихрамывает — не роняем участника, ждём и повторяем
-            print("⚠️ Сервер не ответил — жду и повторяю…")
+            # связь с FTP прихрамывает - не роняем участника, ждём и повторяем
+            print("⚠️ Сервер не ответил - жду и повторяю…")
             time.sleep(5)
             continue
         if ph != last_phase:
@@ -358,7 +358,7 @@ def _main():
             try:
                 from view import load_public_state, print_report
                 print_report(load_public_state(store))
-                print("Это независимый пересчёт — сверь со стеной.")
+                print("Это независимый пересчёт - сверь со стеной.")
             except Exception as e:
                 print("Не удалось пересчитать итог:", e)
                 print("Запусти вручную: ./verify.py")

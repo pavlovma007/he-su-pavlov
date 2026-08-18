@@ -60,7 +60,7 @@ class AgencyEngine:
             self.store.upload_json(pr.META_PHASE_DIR, "REGISTRATION",
                                    {"phase": "REGISTRATION", "set_at": pr.iso_now()})
         if config_path and os.path.exists(config_path):
-            # публикуем свой config.json — участники берут настройки с сервера
+            # публикуем свой config.json - участники берут настройки с сервера
             with open(config_path, "r", encoding="utf-8") as f:
                 self.store.upload_text("config.json", f.read())
 
@@ -156,7 +156,7 @@ def _console(agency, store, stop):
             elif c == "accept":
                 mark = parse_accept(cmd)
                 if mark is None:
-                    print("accept <метка> — например: accept 17 (можно вставить метку как есть)")
+                    print("accept <метка> - например: accept 17 (можно вставить метку как есть)")
                     continue
                 agency.approve_mark(mark)
                 print(f"метка {mark} в очереди на публикацию (пачками)")
@@ -179,7 +179,7 @@ def _console(agency, store, stop):
                 agency.approve_mark(mark)
             elif c == "phase":
                 if len(parts) < 2:
-                    print("phase <ФАЗА> — " + " | ".join(pr.PHASES))
+                    print("phase <ФАЗА> - " + " | ".join(pr.PHASES))
                     continue
                 agency.set_phase(parts[1].upper())
                 print("Фаза:", agency.phase())
@@ -189,7 +189,7 @@ def _console(agency, store, stop):
             else:
                 print("неизвестная команда. help")
         except Exception as e:
-            print(f"Ошибка: {e} — команда не выполнена (help)")
+            print(f"Ошибка: {e} - команда не выполнена (help)")
 
 
 def main():
@@ -213,7 +213,7 @@ def main():
                      daemon=True).start()
     print(f"Стена публикуется на FTP: meta/index.html (каждые {args.wall_interval} сек)")
     print("Открыть в браузере: https://mapavlov.ru/vote-game/meta/index.html")
-    print("(ftp:// в браузерах не открывается — страница раздаётся по HTTPS и обновляется сама)")
+    print("(ftp:// в браузерах не открывается - страница раздаётся по HTTPS и обновляется сама)")
     _console(agency, store, stop)
 
 

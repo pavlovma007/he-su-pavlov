@@ -36,7 +36,7 @@ def test_remove_folder_deletes_entire_tree(ftp_server):
 
 def test_list_items_nlst_fallback_detects_subfolder():
     """Сервер без MLSD: NLST не ставит '/' у папок и присылает '.'/'..'.
-    Вложенная папка должна распознаться как папка, а мусор — отсеяться."""
+    Вложенная папка должна распознаться как папка, а мусор - отсеяться."""
     class FakeFTP:
         def mlsd(self):
             raise TimeoutError("no mlsd")
@@ -55,7 +55,7 @@ def test_list_items_nlst_fallback_detects_subfolder():
 
 
 def test_remove_folder_skips_missing(ftp_server):
-    """Нет папки — не ошибка, просто ноль удалённых."""
+    """Нет папки - не ошибка, просто ноль удалённых."""
     ftp = _ftp(ftp_server)
     assert remove_folder(ftp, "nonexistent-folder", "/") == 0
     ftp.quit()

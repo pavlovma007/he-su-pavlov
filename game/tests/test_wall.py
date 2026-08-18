@@ -20,5 +20,5 @@ def test_publish_wall_overwrites(store, tmp_path):
     agency = AgencyEngine(store, CANDIDATES, key_path=str(tmp_path / "reg.pem"))
     agency.start()
     view.publish_wall(store)
-    view.publish_wall(store)                         # перезапись — это «живой экран»
+    view.publish_wall(store)                         # перезапись - это «живой экран»
     assert store.exists("meta/index.html")

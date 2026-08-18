@@ -11,7 +11,7 @@ from view import load_public_state, print_report
 def main():
     ap = argparse.ArgumentParser(
         description="Независимая проверка голосов из публичных файлов FTP. "
-                    "Настройки берутся из config.json — просто запусти: ./verify.py")
+                    "Настройки берутся из config.json - просто запусти: ./verify.py")
     ap.add_argument("--config", default="config.json", help="файл настроек (по умолчанию config.json)")
     ap.add_argument("--host", help="адрес FTP-сервера (переопределяет config.json)")
     ap.add_argument("--port", type=int, help="порт FTP (по умолчанию из config.json, иначе 21)")
@@ -39,7 +39,7 @@ def main():
 
     if not ftp.get("host"):
         print("Не задан адрес FTP-сервера.")
-        print("Просто запусти ./verify.py из папки игры — настройки возьмутся из config.json.")
+        print("Просто запусти ./verify.py из папки игры - настройки возьмутся из config.json.")
         print("Либо передай вручную: ./verify.py --host <сервер> --user <логин> --password <пароль>")
         return 1
 
